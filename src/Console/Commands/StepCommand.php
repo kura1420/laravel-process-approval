@@ -6,6 +6,9 @@ use Exception;
 use Illuminate\Console\Command;
 use RingleSoft\LaravelProcessApproval\Enums\ApprovalTypeEnum;
 use RingleSoft\LaravelProcessApproval\Facades\ProcessApproval;
+use RingleSoft\LaravelProcessApproval\Models\ProcessApprovalFlow;
+use Spatie\Permission\Models\Role;
+
 use function Laravel\Prompts\alert;
 use function Laravel\Prompts\info;
 use function Laravel\Prompts\select;
@@ -32,7 +35,7 @@ class StepCommand extends Command
     public function handle(): void
     {
         $flows = ProcessApproval::flows();
-        if(!$flows->count()){
+        if (!$flows->count()) {
             alert('There are no flows defined');
             return;
         }
@@ -49,12 +52,12 @@ class StepCommand extends Command
                 $flows = ProcessApproval::flowsWithSteps();
                 foreach ($flows as $flow) {
                     foreach ($flow->steps as $step) {
-                        $steps[$step->id] = $flow->name . ' '. $step->role->name . " - ". $step->action;
+                        $steps[$step->id] = $flow->name . ' ' . $step->role->name . " - " . $step->action;
                     }
                 }
-                if(!count($steps)){
-                   info('No steps available!');
-                   return;
+                if (!count($steps)) {
+                    info('No steps available!');
+                    return;
                 }
                 $step = select("Which step do you want to remove?", $steps);
                 $this->removeStep($step);
@@ -71,8 +74,8 @@ class StepCommand extends Command
     private function addStep($flowId): void
     {
         $rolesModel = config('process_approval.roles_model');
-        if(!class_exists($rolesModel)){
-           alert("`roles_model` not configured");
+        if (!class_exists($rolesModel)) {
+            alert("`roles_model` not configured");
         }
         $roleChoices = ($rolesModel)::query()->get()->pluck('name', 'id')->toArray();
         $role = select(
@@ -81,10 +84,13 @@ class StepCommand extends Command
         );
         $action = select("Select the type of action", collect(ApprovalTypeEnum::cases())->pluck('value')->toArray(), 'Approve');
         try {
-            ProcessApproval::createStep(flowId: $flowId, roleId: $role, action: $action );
+            $_flow = ProcessApprovalFlow::where('name', $flowId)->firstOrFail(); // <-- Here
+            $_role = Role::where('name', $role)->firstOrFail(); // <-- Here
+
+            ProcessApproval::createStep(flowId: $_flow->id, roleId: $_role->id, action: $action);
             info('Step created Successfully');
         } catch (Exception $e) {
-            alert('Failed to create step. '. $e->getMessage());
+            alert('Failed to create step. ' . $e->getMessage());
             return;
         }
     }
@@ -100,8 +106,7 @@ class StepCommand extends Command
             ProcessApproval::deleteStep($stepId);
             info("Step removed successfully!");
         } catch (Exception $e) {
-            alert("Failed to remove step. ". $e->getMessage());
+            alert("Failed to remove step. " . $e->getMessage());
         }
-
     }
 }
